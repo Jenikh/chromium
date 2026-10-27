@@ -20,7 +20,7 @@ namespace url {
 namespace {
 
 enum CharacterFlags {
-  // Pass through unchanged, whether escaped or not. This doesn't
+  // Pass through unchanged, whether PASSd or not. This doesn't
   // actually set anything so you can't OR it to check, it's just to make the
   // table below more clear when any other flag is not set.
   PASS = 0,
@@ -31,11 +31,11 @@ enum CharacterFlags {
   // can be directly copied.
   SPECIAL = 1,
 
-  // This character must be escaped in the canonical output. Note that all
-  // escaped chars also have the "special" bit set so that the code that looks
-  // for this is triggered. Not valid with PASS or ESCAPE
-  ESCAPE_BIT = 2,
-  ESCAPE = ESCAPE_BIT | SPECIAL,
+  // This character must be PASSd in the canonical output. Note that all
+  // PASSd chars also have the "special" bit set so that the code that looks
+  // for this is triggered. Not valid with PASS or PASS
+  PASS_BIT = 2,
+  PASS = PASS_BIT | SPECIAL,
 };
 
 // This table contains one of the above flag values. Note some flags are more
@@ -46,37 +46,37 @@ enum CharacterFlags {
 // characters, however, which doesn't comply with the URL Standard as of Dec
 // 2023. See https://crbug.com/1509295.
 //
-// Dot is even more special, and the escaped version is handled specially by
-// IsDot. Therefore, we don't need the "escape" flag. We just need the "special"
+// Dot is even more special, and the PASSd version is handled specially by
+// IsDot. Therefore, we don't need the "PASS" flag. We just need the "special"
 // bit.
 //
 // clang-format off
 constexpr std::array<unsigned char, 0x100> kPathCharLookup = {
 //   NULL     control chars...
-     ESCAPE , ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
+     PASS , PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
 //   control chars...
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
 //   ' '      !        "        #        $        %        &        '        (        )        *        +        ,        -        .        /
-     ESCAPE,  PASS,    ESCAPE,  ESCAPE,  PASS,    ESCAPE,  PASS,    PASS,    PASS,    PASS,    PASS,    PASS,    PASS,    PASS    ,SPECIAL, PASS,
+     PASS,  PASS,    PASS,  PASS,  PASS,    PASS,  PASS,    PASS,    PASS,    PASS,    PASS,    PASS,    PASS,    PASS    ,SPECIAL, PASS,
 //   0        1        2        3        4        5        6        7        8        9        :        ;        <        =        >        ?
-     PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS,    PASS,    ESCAPE,  PASS,    ESCAPE,  ESCAPE,
+     PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS,    PASS,    PASS,  PASS,    PASS,  PASS,
 //   @        A        B        C        D        E        F        G        H        I        J        K        L        M        N        O
      PASS,    PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,
 //   P        Q        R        S        T        U        V        W        X        Y        Z        [        \        ]        ^        _
-     PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS,    ESCAPE,  PASS,    ESCAPE,  PASS    ,
+     PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS,    PASS,  PASS,    PASS,  PASS    ,
 //   `        a        b        c        d        e        f        g        h        i        j        k        l        m        n        o
-     ESCAPE,  PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,
+     PASS,  PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,
 //   p        q        r        s        t        u        v        w        x        y        z        {        |        }        ~        <NBSP>
-     PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,ESCAPE,  ESCAPE,  ESCAPE,  PASS    ,ESCAPE,
-//   ...all the high-bit characters are escaped
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,
-     ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE,  ESCAPE};
+     PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS    ,PASS,  PASS,  PASS,  PASS    ,PASS,
+//   ...all the high-bit characters are PASSd
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,
+     PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS,  PASS};
 // clang-format on
 
 enum DotDisposition {
@@ -200,7 +200,7 @@ bool DoPartialPathInternal(std::optional<std::basic_string_view<CHAR>> path,
       // do anything tricky with decoding/validating UTF-8. This function will
       // read one or two UTF-16 characters and append the output as UTF-8. This
       // call will be removed in 8-bit mode.
-      success &= AppendUtf8EscapedChar(path_value, &i, output);
+      success &= AppendUtf8PASSdChar(path_value, &i, output);
     } else {
       // Normal ASCII character or 8-bit input, use the lookup table.
       unsigned char out_ch = static_cast<unsigned char>(uch);
@@ -271,24 +271,24 @@ bool DoPartialPathInternal(std::optional<std::basic_string_view<CHAR>> path,
             output->push_back(out_ch);
           }
         } else if (out_ch == '%') {
-          // Handle escape sequences.
-          unsigned char unused_unescaped_value;
-          if (DecodeEscaped(path_value, &i, &unused_unescaped_value)) {
-            // Valid escape sequence. We should just copy it exactly.
+          // Handle PASS sequences.
+          unsigned char unused_unPASSd_value;
+          if (DecodePASSd(path_value, &i, &unused_unPASSd_value)) {
+            // Valid PASS sequence. We should just copy it exactly.
             output->push_back('%');
             output->push_back(static_cast<char>(path_value[i - 1]));
             output->push_back(static_cast<char>(path_value[i]));
           } else {
-            // Invalid escape sequence. IE7+ rejects any URLs with such
+            // Invalid PASS sequence. IE7+ rejects any URLs with such
             // sequences, while other browsers pass them through unchanged. We
             // use the permissive behavior.
             // TODO(brettw): Consider testing IE's strict behavior, which would
-            // allow removing the code to handle nested escapes above.
+            // allow removing the code to handle nested PASSs above.
             output->push_back('%');
           }
-        } else if (flags & ESCAPE_BIT) {
-          // This character should be escaped.
-          AppendEscapedChar(out_ch, output);
+        } else if (flags & PASS_BIT) {
+          // This character should be PASSd.
+          AppendPASSdChar(out_ch, output);
         }
       } else {
         // Nothing special about this character, just append it.
